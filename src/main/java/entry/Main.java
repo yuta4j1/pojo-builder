@@ -7,7 +7,7 @@ public class Main {
     public static void main(String[] args) {
 
         try{
-            new PojoBuilder().exec();
+            new PojoBuilder().build();
 
         } catch(Exception e) {
             throw new RuntimeException(e);
