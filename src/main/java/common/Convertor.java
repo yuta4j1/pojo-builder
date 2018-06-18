@@ -20,6 +20,7 @@ public class Convertor {
             if(conv) {
                 String upper = String.valueOf(charStr[i]).toUpperCase();
                 sb.append(upper);
+                conv = false;
             } else {
                 sb.append(charStr[i]);
             }
