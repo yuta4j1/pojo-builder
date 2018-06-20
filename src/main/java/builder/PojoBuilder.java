@@ -1,12 +1,16 @@
 package builder;
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.StringWriter;
+import java.io.Writer;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.List;
 
 import javax.lang.model.element.Modifier;
 
+import com.google.common.base.CaseFormat;
 import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
@@ -14,62 +18,107 @@ import com.squareup.javapoet.ParameterSpec;
 import com.squareup.javapoet.TypeSpec;
 import com.squareup.javapoet.TypeSpec.Builder;
 
-import common.Convertor;
-import common.Pair;
-
 public class PojoBuilder {
 
-    public void build() throws IOException, ClassNotFoundException {
+    private TableAccess tableAccess;
+    private String tableName;
 
-        TableAccess access = new TableAccess();
-        List<Pair<Object, Object>> p = access.getTableColumnAndType();
-        System.out.println(p);
-
-        Builder pojoBuilder = TypeSpec.classBuilder("Test").addModifiers(Modifier.PUBLIC);
-        p.forEach(fieldInfo -> builderAddFieldInfo(fieldInfo, pojoBuilder));
-        TypeSpec pojo = pojoBuilder.build();
-
-        JavaFile javaFile = JavaFile.builder("com.example.demo", pojo).build();
-        javaFile.writeTo(System.out);
-
+    public PojoBuilder(final TableAccess tableAccess, final String tableName) {
+        this.tableAccess = tableAccess;
+        this.tableName = tableName;
     }
 
-    public FieldSpec defineField(Pair<Object, Object> p) throws ClassNotFoundException {
+    public PojoBuilder(final TableAccess tableAccess) {
+        this(tableAccess, "");
+    }
 
-        Class<?> fieldType = Class.forName((String) p.getRight());
-        String fieldName = Convertor.snakeCase2CamelCase((String) p.getLeft());
+    public String getTableName() {
+        return tableName;
+    }
+
+    public void setTableName(final String tableName) {
+        this.tableName = tableName;
+    }
+
+    /**
+     * 与えられたWriterインスタンスに生成したJavaコード文字列を出力する.
+     * 出力後、Writerインスタンスのclose()を呼ぶ.
+     * 
+     * @param writer Writer
+     */
+    public void writeTo(final Writer out) throws IOException, ClassNotFoundException {
+
+        try {
+            Builder pojoBuilder = TypeSpec.classBuilder("Test").addModifiers(Modifier.PUBLIC);
+    
+            tableAccess.getTableColumnAndType(tableName)
+                .forEach(fieldInfo -> builderAddFieldInfo(fieldInfo, pojoBuilder));
+    
+            TypeSpec pojo = pojoBuilder.build();
+    
+            JavaFile javaFile = JavaFile.builder("com.example.demo", pojo).build();
+            javaFile.writeTo(out);
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        } finally {
+            if (out != null) {
+                out.close();
+            }
+        }
+    }
+
+    public void writeTo(final OutputStream out) throws IOException, ClassNotFoundException {
+        writeTo(new OutputStreamWriter(out));
+    }
+
+    public String renderToString() throws IOException, ClassNotFoundException {
+        StringWriter writer = new StringWriter();
+        writeTo(writer);
+
+        return writer.toString();
+    }
+
+    public FieldSpec defineField(TableMetadata tm) throws ClassNotFoundException {
+
+        Class<?> fieldType = Class.forName(tm.getClassName());
+        String fieldName = CaseFormat.LOWER_UNDERSCORE.to(
+            CaseFormat.LOWER_CAMEL, tm.getFieldName());
         FieldSpec fieldSpec = FieldSpec.builder(fieldType, fieldName).addModifiers(Modifier.PRIVATE).build();
 
         return fieldSpec;
-
     }
 
-    public MethodSpec defineGetter(Pair<Object, Object> p) throws ClassNotFoundException {
+    public MethodSpec defineGetter(TableMetadata tm) throws ClassNotFoundException {
 
-        Class<?> returnType = Class.forName((String) p.getRight());
-        String fieldName = Convertor.snakeCase2CamelCase((String) p.getLeft());
-        String methodName = "get" + Convertor.firstCharUpperConvert(fieldName);
-        MethodSpec methodSpec = MethodSpec.methodBuilder(methodName).addModifiers(Modifier.PUBLIC).returns(returnType)
-                .addStatement("return $N", fieldName).build();
+        Class<?> returnType = Class.forName(tm.getClassName());
+        String fieldName = CaseFormat.LOWER_UNDERSCORE.to(
+            CaseFormat.LOWER_CAMEL, tm.getFieldName());
+        String methodName = "get" + CaseFormat.LOWER_CAMEL.to(CaseFormat.UPPER_CAMEL, fieldName);
 
-        return methodSpec;
-
+        return MethodSpec.methodBuilder(methodName)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(returnType)
+            .addStatement("return $N", fieldName)
+            .build();
     }
 
-    public MethodSpec defineSetter(Pair<Object, Object> p) throws ClassNotFoundException {
+    public MethodSpec defineSetter(TableMetadata tm) throws ClassNotFoundException {
 
-        Class<?> returnType = Class.forName((String) p.getRight());
-        String fieldName = Convertor.snakeCase2CamelCase((String) p.getLeft());
-        String methodName = "set" + Convertor.firstCharUpperConvert(fieldName);
+        Class<?> returnType = Class.forName(tm.getClassName());
+        String fieldName = CaseFormat.LOWER_UNDERSCORE.to(
+            CaseFormat.LOWER_CAMEL, tm.getFieldName());
+        String methodName = "set" + CaseFormat.LOWER_CAMEL.to(CaseFormat.UPPER_CAMEL, fieldName);
         ParameterSpec parameterSpec = ParameterSpec.builder(returnType, fieldName).build();
-        MethodSpec methodSpec = MethodSpec.methodBuilder(methodName).addModifiers(Modifier.PUBLIC)
-                .addParameter(parameterSpec).addStatement("this.$N = $N", fieldName, fieldName).build();
 
-        return methodSpec;
-
+        return MethodSpec.methodBuilder(methodName)
+            .addModifiers(Modifier.PUBLIC)
+            .addParameter(parameterSpec)
+            .addStatement("this.$N = $N", fieldName, fieldName)
+            .build();
     }
 
-    public void builderAddFieldInfo(Pair<Object, Object> fieldInfo, Builder instance) {
+    public void builderAddFieldInfo(TableMetadata fieldInfo, Builder instance) {
         try {
             Class<?> clazz = Class.forName("com.squareup.javapoet.TypeSpec$Builder");
             Method fieldAdd = clazz.getMethod("addField", FieldSpec.class);

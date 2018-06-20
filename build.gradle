@@ -15,10 +15,12 @@ repositories {
 }
 
 dependencies {
-    compile 'org.slf4j:slf4j-api:1.7.21'
+    compile 'com.google.guava:guava:25.1-jre'
+    //compile 'org.slf4j:slf4j-api:1.7.21'
     compile 'com.squareup:javapoet:1.11.1'
-    compile 'mysql:mysql-connector-java:5.1.13'
+    //compile 'mysql:mysql-connector-java:5.1.13'
 
+    testCompile 'com.h2database:h2:1.4.197'
     testCompile 'junit:junit:4.12'
 }
 
