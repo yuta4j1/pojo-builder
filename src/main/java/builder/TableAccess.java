@@ -8,40 +8,34 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-
-import common.Pair;
+import java.util.Properties;
 
 public class TableAccess {
 
-    private static String databaseName;
+    static final String JDBC_CLASS  = "pojobuilder.jdbc.driver";
+    static final String JDBC_URL    = "pojobuilder.jdbc.url";
+    static final String DB_USER     = "pojobuilder.db.user";
+    static final String DB_PASS     = "pojobuilder.db.pass";
 
-    private static String user;
+    private String driverClassName;
+    private String jdbcUrl;
+    private String user;
+    private String password;
 
-    private static String password;
-
-    private static String tableName;
-
-    private static Connection conn;
-
-    public TableAccess() {
-        if(conn == null) {
-            conn = getConnection();
-        }
+    public TableAccess(final Properties props) {
+        this.driverClassName = props.getProperty(JDBC_CLASS);
+        this.jdbcUrl = props.getProperty(JDBC_URL);
+        this.user = props.getProperty(DB_USER);
+        this.password = props.getProperty(DB_PASS);
     }
 
-    public static Connection getConnection() {
-        databaseName = "kinokoyama";
-        user = "root";
-        password = "root";
-        tableName = "USER";
-
-        String url = "jdbc:mysql://localhost/" + databaseName;
+    public Connection getConnection() {
 
         Connection conn = null;
 
         try {
-            Class.forName("com.mysql.jdbc.Driver").newInstance();
-            conn = DriverManager.getConnection(url, user, password);
+            Class.forName(driverClassName).newInstance();
+            conn = DriverManager.getConnection(jdbcUrl, user, password);
 
             System.out.println("Connected...");
 
@@ -58,18 +52,18 @@ public class TableAccess {
         }
     }
 
-    @SuppressWarnings({ "unchecked", "rawtypes" })
-    public <L, R> List<Pair<L, R>> getTableColumnAndType() {
-        if(conn == null) getConnection();
+    public List<TableMetadata> getTableColumnAndType(final String tableName) {
+        Connection conn = getConnection();
 
         String sql = "SELECT * FROM " + tableName;
-        List<Pair<L, R>> columnAndType = new ArrayList<>();
+        List<TableMetadata> columnAndType = new ArrayList<>();
         try(PreparedStatement pstmt = conn.prepareStatement(sql);
-                ResultSet rs = pstmt.executeQuery();) {
+                ResultSet rs = pstmt.executeQuery();
+                ) {
             ResultSetMetaData metaInfo = rs.getMetaData();
             int columnNum = metaInfo.getColumnCount();
             for(int i = 1; i <= columnNum; i++) {
-                columnAndType.add(new Pair(metaInfo.getColumnName(i), metaInfo.getColumnClassName(i)));
+                columnAndType.add(TableMetadata.readResultSet(metaInfo, i));
             }
 
         }catch(SQLException e) {
